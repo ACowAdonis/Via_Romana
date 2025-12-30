@@ -45,6 +45,8 @@ public final class NodeConnectionRenderer {
     private static final float VERTICAL_WANDER_SCALE = 0.4f;
 
     private static final ResourceLocation CONNECTION_TEXTURE = VersionUtils.getLocation("via_romana:textures/effect/connection_ribbon.png");
+    private static boolean useParticleFormat = false;
+
     private static RenderType getRenderType() {
         boolean shadersInUse = false;
         try {
@@ -54,7 +56,15 @@ public final class NodeConnectionRenderer {
         } catch (Exception e) {
             shadersInUse = false;
         }
-        return shadersInUse ? RenderType.entityTranslucentEmissive(CONNECTION_TEXTURE, true) : RenderType.beaconBeam(CONNECTION_TEXTURE, true);
+
+        // Use particle format for better shader compatibility (routes to gbuffers_textured)
+        if (shadersInUse) {
+            useParticleFormat = true;
+            return ParticleRenderTypes.particleTranslucent(CONNECTION_TEXTURE);
+        }
+
+        useParticleFormat = false;
+        return RenderType.beaconBeam(CONNECTION_TEXTURE, true);
     }
 
     // Animation Constants
@@ -278,9 +288,19 @@ public final class NodeConnectionRenderer {
     private static void put(PoseStack.Pose pose, VertexConsumer consumer, Vec3 pos, int color, float u, float v, int overlay, int light, Vec3 normal) {
         //? if <1.21 {
         /*Matrix4f matrix = pose.pose();
-        consumer.vertex(matrix, (float)pos.x, (float)pos.y, (float)pos.z).color(color).uv(u, v).overlayCoords(0).uv2(0xF000F0).normal((float)normal.x, (float)normal.y, (float)normal.z).endVertex();
+        if (useParticleFormat) {
+            // PARTICLE format: position, uv, color, light (no overlay, no normal)
+            consumer.vertex(matrix, (float)pos.x, (float)pos.y, (float)pos.z).uv(u, v).color(color).uv2(0xF000F0).endVertex();
+        } else {
+            consumer.vertex(matrix, (float)pos.x, (float)pos.y, (float)pos.z).color(color).uv(u, v).overlayCoords(0).uv2(0xF000F0).normal((float)normal.x, (float)normal.y, (float)normal.z).endVertex();
+        }
         *///?} else {
-        consumer.addVertex(pose, (float)pos.x, (float)pos.y, (float)pos.z).setColor(color).setUv(u, v).setOverlay(overlay).setLight(light).setNormal((float)normal.x, (float)normal.y, (float)normal.z);
+        if (useParticleFormat) {
+            // PARTICLE format: position, uv, color, light (no overlay, no normal)
+            consumer.addVertex(pose, (float)pos.x, (float)pos.y, (float)pos.z).setUv(u, v).setColor(color).setLight(light);
+        } else {
+            consumer.addVertex(pose, (float)pos.x, (float)pos.y, (float)pos.z).setColor(color).setUv(u, v).setOverlay(overlay).setLight(light).setNormal((float)normal.x, (float)normal.y, (float)normal.z);
+        }
         //?}
     }
 

@@ -58,6 +58,8 @@ public class NodeRenderer {
     private static final int SOUND_INTERVAL_TICKS = 40;
 
     private static int getPulseDistance() { return ClientConfigCache.nodeUtilityDistance; }
+    private static boolean useParticleFormat = false;
+
     private static RenderType getRenderType() {
         boolean shadersInUse = false;
         try {
@@ -67,7 +69,15 @@ public class NodeRenderer {
         } catch (Exception e) {
             shadersInUse = false;
         }
-        return shadersInUse ? RenderType.entityTranslucentEmissive(BEAM_TEXTURE, true) : RenderType.beaconBeam(BEAM_TEXTURE, true);
+
+        // Use particle format for better shader compatibility (routes to gbuffers_textured)
+        if (shadersInUse) {
+            useParticleFormat = true;
+            return ParticleRenderTypes.particleTranslucent(BEAM_TEXTURE);
+        }
+
+        useParticleFormat = false;
+        return RenderType.beaconBeam(BEAM_TEXTURE, true);
     }
 
     private static final float ANIMATION_SPEED_SEC = -1.0f;
@@ -326,23 +336,47 @@ public class NodeRenderer {
     private static void renderSegment(PoseStack.Pose pose, VertexConsumer consumer, float x1, float y0, float z1, float x2, float y1, float z2, int color0, int color1, float v0, float v1, int overlay, int light) {
         //? if <1.21 {
         /*Matrix4f matrix = pose.pose();
-        consumer.vertex(matrix, x1, y0, z1).color(color0).uv(0, v0).overlayCoords(overlay).uv2(light).normal(1,0,0).endVertex();
-        consumer.vertex(matrix, x2, y0, z2).color(color0).uv(1, v0).overlayCoords(overlay).uv2(light).normal(1,0,0).endVertex();
-        consumer.vertex(matrix, x2, y1, z2).color(color1).uv(1, v1).overlayCoords(overlay).uv2(light).normal(1,0,0).endVertex();
-        consumer.vertex(matrix, x1, y1, z1).color(color1).uv(0, v1).overlayCoords(overlay).uv2(light).normal(1,0,0).endVertex();
-        consumer.vertex(matrix, x2, y0, z2).color(color0).uv(0, v0).overlayCoords(overlay).uv2(light).normal(-1,0,0).endVertex();
-        consumer.vertex(matrix, x1, y0, z1).color(color0).uv(1, v0).overlayCoords(overlay).uv2(light).normal(-1,0,0).endVertex();
-        consumer.vertex(matrix, x1, y1, z1).color(color1).uv(1, v1).overlayCoords(overlay).uv2(light).normal(-1,0,0).endVertex();
-        consumer.vertex(matrix, x2, y1, z2).color(color1).uv(0, v1).overlayCoords(overlay).uv2(light).normal(-1,0,0).endVertex();
+        if (useParticleFormat) {
+            // PARTICLE format: position, uv, color, light (no overlay, no normal)
+            consumer.vertex(matrix, x1, y0, z1).uv(0, v0).color(color0).uv2(light).endVertex();
+            consumer.vertex(matrix, x2, y0, z2).uv(1, v0).color(color0).uv2(light).endVertex();
+            consumer.vertex(matrix, x2, y1, z2).uv(1, v1).color(color1).uv2(light).endVertex();
+            consumer.vertex(matrix, x1, y1, z1).uv(0, v1).color(color1).uv2(light).endVertex();
+            consumer.vertex(matrix, x2, y0, z2).uv(0, v0).color(color0).uv2(light).endVertex();
+            consumer.vertex(matrix, x1, y0, z1).uv(1, v0).color(color0).uv2(light).endVertex();
+            consumer.vertex(matrix, x1, y1, z1).uv(1, v1).color(color1).uv2(light).endVertex();
+            consumer.vertex(matrix, x2, y1, z2).uv(0, v1).color(color1).uv2(light).endVertex();
+        } else {
+            consumer.vertex(matrix, x1, y0, z1).color(color0).uv(0, v0).overlayCoords(overlay).uv2(light).normal(1,0,0).endVertex();
+            consumer.vertex(matrix, x2, y0, z2).color(color0).uv(1, v0).overlayCoords(overlay).uv2(light).normal(1,0,0).endVertex();
+            consumer.vertex(matrix, x2, y1, z2).color(color1).uv(1, v1).overlayCoords(overlay).uv2(light).normal(1,0,0).endVertex();
+            consumer.vertex(matrix, x1, y1, z1).color(color1).uv(0, v1).overlayCoords(overlay).uv2(light).normal(1,0,0).endVertex();
+            consumer.vertex(matrix, x2, y0, z2).color(color0).uv(0, v0).overlayCoords(overlay).uv2(light).normal(-1,0,0).endVertex();
+            consumer.vertex(matrix, x1, y0, z1).color(color0).uv(1, v0).overlayCoords(overlay).uv2(light).normal(-1,0,0).endVertex();
+            consumer.vertex(matrix, x1, y1, z1).color(color1).uv(1, v1).overlayCoords(overlay).uv2(light).normal(-1,0,0).endVertex();
+            consumer.vertex(matrix, x2, y1, z2).color(color1).uv(0, v1).overlayCoords(overlay).uv2(light).normal(-1,0,0).endVertex();
+        }
         *///?} else {
-        consumer.addVertex(pose, x1, y0, z1).setColor(color0).setUv(0, v0).setOverlay(overlay).setLight(light).setNormal(1, 0, 0);
-        consumer.addVertex(pose, x2, y0, z2).setColor(color0).setUv(1, v0).setOverlay(overlay).setLight(light).setNormal(1, 0, 0);
-        consumer.addVertex(pose, x2, y1, z2).setColor(color1).setUv(1, v1).setOverlay(overlay).setLight(light).setNormal(1, 0, 0);
-        consumer.addVertex(pose, x1, y1, z1).setColor(color1).setUv(0, v1).setOverlay(overlay).setLight(light).setNormal(1, 0, 0);
-        consumer.addVertex(pose, x2, y0, z2).setColor(color0).setUv(0, v0).setOverlay(overlay).setLight(light).setNormal(-1, 0, 0);
-        consumer.addVertex(pose, x1, y0, z1).setColor(color0).setUv(1, v0).setOverlay(overlay).setLight(light).setNormal(-1, 0, 0);
-        consumer.addVertex(pose, x1, y1, z1).setColor(color1).setUv(1, v1).setOverlay(overlay).setLight(light).setNormal(-1, 0, 0);
-        consumer.addVertex(pose, x2, y1, z2).setColor(color1).setUv(0, v1).setOverlay(overlay).setLight(light).setNormal(-1, 0, 0);
+        if (useParticleFormat) {
+            // PARTICLE format: position, uv, color, light (no overlay, no normal)
+            consumer.addVertex(pose, x1, y0, z1).setUv(0, v0).setColor(color0).setLight(light);
+            consumer.addVertex(pose, x2, y0, z2).setUv(1, v0).setColor(color0).setLight(light);
+            consumer.addVertex(pose, x2, y1, z2).setUv(1, v1).setColor(color1).setLight(light);
+            consumer.addVertex(pose, x1, y1, z1).setUv(0, v1).setColor(color1).setLight(light);
+            consumer.addVertex(pose, x2, y0, z2).setUv(0, v0).setColor(color0).setLight(light);
+            consumer.addVertex(pose, x1, y0, z1).setUv(1, v0).setColor(color0).setLight(light);
+            consumer.addVertex(pose, x1, y1, z1).setUv(1, v1).setColor(color1).setLight(light);
+            consumer.addVertex(pose, x2, y1, z2).setUv(0, v1).setColor(color1).setLight(light);
+        } else {
+            consumer.addVertex(pose, x1, y0, z1).setColor(color0).setUv(0, v0).setOverlay(overlay).setLight(light).setNormal(1, 0, 0);
+            consumer.addVertex(pose, x2, y0, z2).setColor(color0).setUv(1, v0).setOverlay(overlay).setLight(light).setNormal(1, 0, 0);
+            consumer.addVertex(pose, x2, y1, z2).setColor(color1).setUv(1, v1).setOverlay(overlay).setLight(light).setNormal(1, 0, 0);
+            consumer.addVertex(pose, x1, y1, z1).setColor(color1).setUv(0, v1).setOverlay(overlay).setLight(light).setNormal(1, 0, 0);
+            consumer.addVertex(pose, x2, y0, z2).setColor(color0).setUv(0, v0).setOverlay(overlay).setLight(light).setNormal(-1, 0, 0);
+            consumer.addVertex(pose, x1, y0, z1).setColor(color0).setUv(1, v0).setOverlay(overlay).setLight(light).setNormal(-1, 0, 0);
+            consumer.addVertex(pose, x1, y1, z1).setColor(color1).setUv(1, v1).setOverlay(overlay).setLight(light).setNormal(-1, 0, 0);
+            consumer.addVertex(pose, x2, y1, z2).setColor(color1).setUv(0, v1).setOverlay(overlay).setLight(light).setNormal(-1, 0, 0);
+        }
         //?}
 
     }
