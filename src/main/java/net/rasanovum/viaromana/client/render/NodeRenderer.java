@@ -306,6 +306,9 @@ public class NodeRenderer {
         });
     }
 
+    // Emissive multiplier for bloom effects (values > 1.0 trigger bloom in compatible shaders)
+    private static final float EMISSIVE_INTENSITY = 1.8f;
+
     private static void renderBeamGeometry(PoseStack poseStack, VertexConsumer consumer, float r, float g, float b, float a, float vOffset) {
         PoseStack.Pose pose = poseStack.last();
         float halfWidth = BEAM_WIDTH / 2.0f;
@@ -317,7 +320,12 @@ public class NodeRenderer {
 
         int overlay = 655360;
         int light = 15728880;
-        int rgb = ((int)(r * 255) << 16) | ((int)(g * 255) << 8) | (int)(b * 255);
+
+        // Apply emissive intensity for bloom (clamped to 255 for color channel)
+        int rInt = Math.min(255, (int)(r * EMISSIVE_INTENSITY * 255));
+        int gInt = Math.min(255, (int)(g * EMISSIVE_INTENSITY * 255));
+        int bInt = Math.min(255, (int)(b * EMISSIVE_INTENSITY * 255));
+        int rgb = (rInt << 16) | (gInt << 8) | bInt;
 
         for (int i = 0; i < BEAM_SEGMENTS; i++) {
             float t0 = (float) i / BEAM_SEGMENTS, t1 = (float) (i + 1) / BEAM_SEGMENTS;
@@ -399,7 +407,12 @@ public class NodeRenderer {
         return playerPos.distanceTo(new Vec3(nodePos.getX() + 0.5, clampedY, nodePos.getZ() + 0.5));
     }
 
-    private static float fadeEnds(float t) { return Mth.clamp(Math.min(t, 1 - t) / BEAM_FADE_FRACTION, 0.0f, 1.0f); }
+    // Smooth fade using smoothstep curve for softer edges
+    private static float fadeEnds(float t) {
+        float linear = Mth.clamp(Math.min(t, 1 - t) / BEAM_FADE_FRACTION, 0.0f, 1.0f);
+        // Smoothstep: 3t^2 - 2t^3 for softer gradient
+        return linear * linear * (3.0f - 2.0f * linear);
+    }
 
     private static void playNodeSoundAtPosition(ClientLevel level, BlockPos pos, double adjustedY, long currentTime) {
         if (nodeSoundTimes.getOrDefault(pos, 0L) > currentTime - SOUND_INTERVAL_TICKS) return;

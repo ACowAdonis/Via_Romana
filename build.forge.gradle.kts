@@ -56,6 +56,7 @@ mixin {
 }
 
 repositories {
+    flatDir { dirs("libs") }
     maven("https://maven.su5ed.dev/releases")
     maven("https://repo.sleeping.town/")
     maven("https://maven.terraformersmc.com/")
@@ -73,7 +74,13 @@ repositories {
 dependencies {
     minecraft("net.minecraftforge:forge:${property("deps.minecraft")}-${property("deps.forge_version")}")
 
-    implementation(fg.deobf("maven.modrinth:data-anchor:${property("deps.data-anchor")}"))
+    // Check for local Data Anchor jar first, fall back to Modrinth
+    val localDataAnchor = rootProject.file("libs/Data_Anchor-forge-1.20.1-1.0.0.21.jar")
+    if (localDataAnchor.exists()) {
+        implementation(fg.deobf(files(localDataAnchor)))
+    } else {
+        implementation(fg.deobf("maven.modrinth:data-anchor:${property("deps.data-anchor")}"))
+    }
     implementation(fg.deobf("maven.modrinth:midnightlib:${property("deps.midnightlib")}"))
     implementation(fg.deobf("maven.modrinth:moonlight:${property("deps.moonlightlib")}"))
 

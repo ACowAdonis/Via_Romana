@@ -44,6 +44,14 @@ public final class NodeConnectionRenderer {
     private static final int SUB_SEGMENTS = 4;
     private static final float VERTICAL_WANDER_SCALE = 0.4f;
 
+    // Wave animation parameters
+    private static final float WAVE_AMPLITUDE = 0.08f;  // Lateral wave intensity
+    private static final float WAVE_FREQUENCY = 3.0f;   // Waves per unit distance
+    private static final float WAVE_SPEED = 2.0f;       // Wave animation speed
+
+    // Emissive multiplier for bloom effects
+    private static final float EMISSIVE_INTENSITY = 1.6f;
+
     private static final ResourceLocation CONNECTION_TEXTURE = VersionUtils.getLocation("via_romana:textures/effect/connection_ribbon.png");
     private static boolean useParticleFormat = false;
 
@@ -83,10 +91,12 @@ public final class NodeConnectionRenderer {
         if (nearby.isEmpty()) return;
 
         PoseStack.Pose pose = poseStack.last();
-        RibbonConfig primaryConfig = new RibbonConfig(0.2f, 0.25f, 0.4f, (float)Math.toRadians(70.0), 1.0f, 1.0f, 1.0f, bufferSource.getBuffer(getRenderType()));
-        RibbonConfig secondaryConfig = new RibbonConfig(0.2f, 0.30f, -0.3f, (float)Math.toRadians(70.0), 1.0f, 1.0f, 1.0f, bufferSource.getBuffer(getRenderType()));
-        RibbonConfig signConfig = new RibbonConfig(0.3f, 0.20f, 0.16f, (float)Math.toRadians(70.0), 1.0f, 1.0f, 1.0f, bufferSource.getBuffer(getRenderType()));
-        RibbonConfig tempSignConfig = new RibbonConfig(0.3f, 0.20f, 0.16f, (float)Math.toRadians(70.0), 0.0f, 1.0f, 0.0f, bufferSource.getBuffer(getRenderType()));
+        // Primary ribbon: higher alpha, wider cross angle for more depth
+        RibbonConfig primaryConfig = new RibbonConfig(0.35f, 0.28f, 0.4f, (float)Math.toRadians(75.0), 1.0f, 1.0f, 1.0f, bufferSource.getBuffer(getRenderType()));
+        // Secondary ribbon: slightly different settings for layered effect
+        RibbonConfig secondaryConfig = new RibbonConfig(0.25f, 0.35f, -0.3f, (float)Math.toRadians(65.0), 0.9f, 0.95f, 1.0f, bufferSource.getBuffer(getRenderType()));
+        RibbonConfig signConfig = new RibbonConfig(0.4f, 0.22f, 0.16f, (float)Math.toRadians(70.0), 1.0f, 1.0f, 1.0f, bufferSource.getBuffer(getRenderType()));
+        RibbonConfig tempSignConfig = new RibbonConfig(0.4f, 0.22f, 0.16f, (float)Math.toRadians(70.0), 0.0f, 1.0f, 0.0f, bufferSource.getBuffer(getRenderType()));
 
         for (Node a : nearby) {
             Vec3 aCenter = Vec3.atCenterOf(BlockPos.of(a.getPos()));
@@ -239,15 +249,44 @@ public final class NodeConnectionRenderer {
     private static void drawPath(PoseStack.Pose pose, PathData path, float animationTime, RibbonConfig config, float baseAlpha) {
         if (path.points().size() < 2) return;
         float vScroll = -(animationTime * config.scrollSpeedSec());
-        double totalDist = path.points().get(0).distanceTo(path.points().get(path.points().size() -1));
+        double totalDist = path.points().get(0).distanceTo(path.points().get(path.points().size() - 1));
+
+        // Calculate perpendicular direction for wave displacement
+        Vec3 pathDir = path.points().get(path.points().size() - 1).subtract(path.points().get(0)).normalize();
+        Vec3 wavePerp = pathDir.cross(new Vec3(0, 1, 0)).normalize();
+        if (wavePerp.lengthSqr() < 0.1) wavePerp = pathDir.cross(new Vec3(1, 0, 0)).normalize();
+
+        // Apply emissive intensity for bloom
+        float r = Math.min(1.0f, config.r() * EMISSIVE_INTENSITY);
+        float g = Math.min(1.0f, config.g() * EMISSIVE_INTENSITY);
+        float b = Math.min(1.0f, config.b() * EMISSIVE_INTENSITY);
+
         for (int i = 0; i < path.points().size() - 1; i++) {
             float t0 = (float) i / (path.points().size() - 1);
             float t1 = (float) (i + 1) / (path.points().size() - 1);
+
+            // Apply wave displacement for flowing motion
+            float wave0 = (float) Math.sin((t0 * totalDist * WAVE_FREQUENCY) + (animationTime * WAVE_SPEED)) * WAVE_AMPLITUDE;
+            float wave1 = (float) Math.sin((t1 * totalDist * WAVE_FREQUENCY) + (animationTime * WAVE_SPEED)) * WAVE_AMPLITUDE;
+
+            // Taper wave at ends for smoother look
+            float waveTaper0 = (float) Math.sin(t0 * Math.PI);
+            float waveTaper1 = (float) Math.sin(t1 * Math.PI);
+
+            Vec3 p0 = path.points().get(i).add(wavePerp.scale(wave0 * waveTaper0));
+            Vec3 p1 = path.points().get(i + 1).add(wavePerp.scale(wave1 * waveTaper1));
+
+            // Smoother alpha fade
             float alpha0 = baseAlpha * fadeEnds(t0);
             float alpha1 = baseAlpha * fadeEnds(t1);
+
             float v0 = t0 * (float) totalDist * 0.25f + vScroll;
             float v1 = t1 * (float) totalDist * 0.25f + vScroll;
-            renderCrossedQuads(pose, config.consumer(), path.points().get(i), path.points().get(i+1), path.tangents().get(i), path.tangents().get(i+1), v0, v1, alpha0, alpha1, config.width(), config.crossAngleRadians(), config.r(), config.g(), config.b());
+
+            // Vary width slightly along path for more organic feel
+            float widthMod = 1.0f + 0.15f * (float) Math.sin(t0 * Math.PI * 2 + animationTime);
+
+            renderCrossedQuads(pose, config.consumer(), p0, p1, path.tangents().get(i), path.tangents().get(i + 1), v0, v1, alpha0, alpha1, config.width() * widthMod, config.crossAngleRadians(), r, g, b);
         }
     }
 
@@ -310,8 +349,11 @@ public final class NodeConnectionRenderer {
         return v.scale(cos).add(axis.cross(v).scale(sin)).add(axis.scale(dot * (1 - cos)));
     }
 
+    // Smooth fade using smoothstep curve for softer edges
     private static float fadeEnds(float t) {
-        return Mth.clamp(Math.min(t, 1 - t) / RIBBON_FADE_FRACTION, 0.0f, 1.0f);
+        float linear = Mth.clamp(Math.min(t, 1 - t) / RIBBON_FADE_FRACTION, 0.0f, 1.0f);
+        // Smoothstep: 3t^2 - 2t^3 for softer gradient
+        return linear * linear * (3.0f - 2.0f * linear);
     }
 
     private static Vec3 quad(Vec3 p0, Vec3 p1, Vec3 p2, float t) {
